@@ -1,26 +1,110 @@
-#include <mcp2515_defs.h>
-#include <mcp2515.h>
-#include <defaults.h>
-#include <global.h>
-#include <Canbus.h>
+#include <CAN.h>
 
 #define LED_OPEN 7
 #define LED_ERR 8
 #define CMD_LEN (sizeof("T12345678811223344556677881234\r")+1)
 
+#define CANSPEED_500 500E3
+#define CANSPEED_100 100E3
+#define CANSPEED_125 125E3
+#define CANSPEED_1000 1000E3
+#define CANSPEED_250 250E3
+
 int g_can_speed = CANSPEED_500; // default: 500k
 int g_ts_en = 0;
+
+typedef struct
+{
+  uint16_t id;
+  uint16_t ide;
+  struct {
+    int8_t rtr : 1;
+    int8_t ide : 1;
+    uint8_t length : 4;
+  } header;
+  uint8_t data[8];
+} tCAN;
+
+// transfer messages from CAN bus to host
+void xfer_can2tty(tCAN &msg)
+{
+  char buf[CMD_LEN];
+  int i;
+  static uint16_t ts = 0;
+  char *p;
+  uint8_t len;
+
+    p = buf;
+    if (msg.header.ide) {
+      if (msg.header.rtr) {
+        *p++ = 'R';
+      } else {
+        *p++ = 'T';
+      }
+      p += b2ahex(p, 4, 1, &msg.id);
+      p += b2ahex(p, 4, 1, &msg.ide);
+      len = msg.header.length % 10;
+      p += b2ahex(p, 1, 1, &len);
+    } else {
+      if (msg.header.rtr) {
+        *p++ = 'r';
+      } else {
+        *p++ = 't';
+      }
+      p += b2ahex(p, 3, 1, &msg.id);
+      len = msg.header.length;
+      p += b2ahex(p, 1, 1, &len);
+    }
+
+    p += b2ahex(p, 2, msg.header.length, msg.data);
+
+    // insert timestamp if needed
+    if (g_ts_en) {
+      p += b2ahex(p, 4, 1, &ts); // up to 60,000ms
+      ts++;
+    }
+
+    *p++ = '\r';
+    *p++ = '\0';
+    Serial.print(buf);
+}
+
+void onReceive(int packetSize) {
+  tCAN msg;
+
+  msg.id = CAN.packetId();
+  msg.header.length = packetSize;
+  msg.header.ide = CAN.packetExtended();
+  msg.header.rtr = CAN.packetRtr();
+
+  for(int i = 0; i < packetSize; i++) {
+    msg.data[i] = CAN.read();
+  }
+
+  xfer_can2tty(msg);
+}
+
+void transmit(tCAN& msg) {
+  CAN.beginPacket(msg.id);
+
+  for(size_t i = 0; i < msg.header.length; i++) {
+    CAN.write(msg.data[i]);
+  }
+
+  CAN.endPacket();
+}
 
 // the setup function runs once when you press reset or power the board
 void setup() {
   pinMode(LED_OPEN, OUTPUT);
   pinMode(LED_ERR, OUTPUT);
-  Serial.begin(1000000); // select from 115200,500000,1000000,2000000
-  if (Canbus.init(g_can_speed)) {
-    digitalWrite(LED_ERR, LOW);
-  } else {
-    digitalWrite(LED_ERR, HIGH);
+  Serial.begin(115200); // select from 115200,500000,1000000,2000000
+    // start the CAN bus at 500 kbps
+  if (!CAN.begin(500E3)) {
+    //Serial.println("Starting CAN failed!");
+    while (1);
   }
+  CAN.onReceive(onReceive);
 }
 
 int b2ahex(char *p, uint8_t s, uint8_t n, void *v)
@@ -99,53 +183,6 @@ int a2bhex(char *p, uint8_t s, uint8_t n, void *v)
   return n;
 }
 
-// transfer messages from CAN bus to host
-void xfer_can2tty()
-{
-  tCAN msg;
-  char buf[CMD_LEN];
-  int i;
-  static uint16_t ts = 0;
-  char *p;
-  uint8_t len;
-
-  while (Canbus.message_rx(&msg)) {
-    p = buf;
-    if (msg.header.ide) {
-      if (msg.header.rtr) {
-        *p++ = 'R';
-      } else {
-        *p++ = 'T';
-      }
-      p += b2ahex(p, 4, 1, &msg.id);
-      p += b2ahex(p, 4, 1, &msg.ide);
-      len = msg.header.length % 10;
-      p += b2ahex(p, 1, 1, &len);
-    } else {
-      if (msg.header.rtr) {
-        *p++ = 'r';
-      } else {
-        *p++ = 't';
-      }
-      p += b2ahex(p, 3, 1, &msg.id);
-      len = msg.header.length;
-      p += b2ahex(p, 1, 1, &len);
-    }
-
-    p += b2ahex(p, 2, msg.header.length, msg.data);
-
-    // insert timestamp if needed
-    if (g_ts_en) {
-      p += b2ahex(p, 4, 1, &ts); // up to 60,000ms
-      ts++;
-    }
-
-    *p++ = '\r';
-    *p++ = '\0';
-    Serial.print(buf);
-  }
-}
-
 void slcan_ack()
 {
   Serial.write('\r'); // ACK
@@ -174,7 +211,7 @@ void send_canmsg(char *buf)
     msg.header.length = hlen;
     if (len - 4 - 1 == msg.header.length * 2) {
       a2bhex(&buf[5], 2, msg.header.length, msg.data);
-      while (!Canbus.message_tx(&msg)) ;
+      transmit(msg);
     }
 
   } else if (is_eff && len >= 9) { // EFF
@@ -187,7 +224,7 @@ void send_canmsg(char *buf)
     msg.header.length = hlen;
     if (len - 9 - 1 == msg.header.length * 2) {
       a2bhex(&buf[10], 2, msg.header.length, msg.data);
-      while (!Canbus.message_tx(&msg)) ;
+      transmit(msg);
     }
   }
 }
@@ -198,11 +235,6 @@ void pars_slcancmd(char *buf)
     // common commands
     case 'O': // open channel
       digitalWrite(LED_OPEN, HIGH);
-      if (Canbus.init(g_can_speed)) {
-        digitalWrite(LED_ERR, LOW);
-      } else {
-        digitalWrite(LED_ERR, HIGH);
-      }
       slcan_ack();
       break;
     case 'C': // close channel
@@ -317,6 +349,5 @@ void xfer_tty2can()
 
 // the loop function runs over and over again forever
 void loop() {
-  xfer_can2tty();
   xfer_tty2can();
 }
