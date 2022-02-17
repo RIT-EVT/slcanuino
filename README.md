@@ -31,6 +31,9 @@ many resources for working with serial CAN devices.
 1. Sandeep Mistry's arduino-CAN library which can be installed via the
    built in Arduino Library Manager tool
 
+To find Sandeep's CAN library, open the Arduino Library Manager,
+search for "MCP2515", and scroll down and look for Sandeep's name.
+
 ## Example usage with Python-CAN
 
 ```bash
