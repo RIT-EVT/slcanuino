@@ -67,7 +67,7 @@ void xfer_can2tty(tCAN &msg) {
     Serial.print(buf);
 }
 
-void onReceive(int packetSize) {
+void can_receive_callback(int packetSize) {
     tCAN msg;
 
     msg.id = CAN.packetId();
@@ -103,7 +103,7 @@ void setup() {
         while (1)
             ;
     }
-    CAN.onReceive(onReceive);
+    CAN.onReceive(can_receive_callback);
 }
 
 int b2ahex(char *p, uint8_t s, uint8_t n, void *v) {
