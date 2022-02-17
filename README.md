@@ -1,46 +1,44 @@
-# Slcanuino
+#Slcanuino
 
-This is an Arduino sketch which makes a CAN-BUS shield into a CAN-USB adapter for Linux SocketCAN(can-utils). Library files under Canbus folder originaly comes from 'CAN-BUS ECU Reader demo sketch v4' on skpang and were modified. The files should be copied under ~/Arduino/libraries/ to compile the sketch file:'slcan.ino'.
+NOTE: This project is a fork of
+[kahiroka's Slcanuino program](https://github.com/kahiroka/slcanuino).
 
-http://skpang.co.uk/catalog/arduino-canbus-shield-with-usd-card-holder-p-706.html
+This Arduino program enables an Arduino with a CAN shield to operate as a
+serial can device. The script implements the LAWICEL ASCII protocol for
+converting serial communication to CAN. To see the original, see section
+2 of the [CAN232](http://www.can232.com/docs/can232_v3.pdf) datasheet.
 
+This project as mentioned is forked. The code was modified to make sure of
+a CAN library made by
+[Sandeep Mistry](https://github.com/sandeepmistry/arduino-CAN). This allows
+the script to be easier to install and run, and also supports multiple
+Arduino compatible platforms.
 
 # Supported hardware
 
-I tested this sketch on the following 'CAN-BUS Shield'.
-
-https://www.sparkfun.com/products/10039
-
-If you are using SeeedStudio's one with its default setting please modify MCP2515_CS 'B,2' with 'B,1' in 'Canbus/defaults.h'.
-
-http://wiki.seeedstudio.com/CAN-BUS_Shield_V2.0/
-
+* Arduino compatible platform
+* MCP2515 Arduino CAN shield
 
 # How to use
 
-Burn your Arduino with this and install can-utils for your linux environment in advance.
+Program the Arduino with the contained script and use along side existing
+Slcan supported tools. For example, the tool
+[python-can](https://python-can.readthedocs.io/en/master/index.html) has
+many resources for working with serial CAN devices.
 
 ## Deps
-1. slcan (kernel module)
-2. SocketCAN (http://www.pengutronix.de/software/libsocketcan/)
-3. can-utils (https://github.com/linux-can/can-utils)
 
-or just install can-utils package.
+1. Sandeep Mistry's arduino-CAN library which can be installed via the
+   built in Arduino Library Manager tool
 
-    $ sudo apt install can-utils
+## Example usage with Python-CAN
 
-## Setup
-Please replace ttyUSB with ttyACM in case of using Arduino Uno.
+```bash
+python -m can.viewer -c /dev/tty.usbmodem143301@115200 -i slcan
+```
 
-    $ sudo slcan_attach -f -s6 -o /dev/ttyUSB0  
-    $ sudo slcand -S 1000000 ttyUSB0 can0  
-    $ sudo ifconfig can0 up  
+Where `/dev/tty.usbmodem143301` is replaced with the path to the serial
+device.
 
-then,
-
-    $ candump can0
-
-## Cleanup
-
-    $ sudo ifconfig can0 down  
-    $ sudo killall slcand  
+For more information, see [Python-CAN's documentation](https://python-can.readthedocs.io/en/master/interfaces/slcan.html)
+on working with Slcan.
