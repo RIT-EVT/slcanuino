@@ -70,9 +70,17 @@ void xfer_can2tty(tCAN &msg) {
 void can_receive_callback(int packetSize) {
     tCAN msg;
 
-    msg.id = CAN.packetId();
+    uint32_t id = CAN.packetId();
+    if(CAN.packetExtended()) {
+        msg.header.ide = true;
+        msg.id = id >> 16;
+        msg.ide = id & 131071;
+    } else {
+        msg.header.ide = false;
+        msg.id = CAN.packetId();
+    }
+    
     msg.header.length = packetSize;
-    msg.header.ide = CAN.packetExtended();
     msg.header.rtr = CAN.packetRtr();
 
     for (int i = 0; i < packetSize; i++) {
